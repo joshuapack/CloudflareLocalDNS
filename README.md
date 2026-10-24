@@ -107,8 +107,10 @@ The repository includes complete systemd service integration.
    - Verifies systemd compatibility.
    - Checks if the service is already installed to prevent accidental overwrites.
    - Installs the binary to `/usr/local/bin/cloudflarelocaldns`.
-   - Creates `/etc/cloudflarelocaldns` and copies your `.env` there with secure permissions (`0600`).
-   - Generates `/etc/systemd/system/cloudflarelocaldns.service` with automatic crash recovery (`Restart=always`).
+   - Generates `/etc/systemd/system/cloudflarelocaldns.service` with:
+     - `WorkingDirectory` set to the project repository directory.
+     - `EnvironmentFile` directly pointing to the project's `.env` file.
+     - Automatic crash recovery (`Restart=always`).
    - Reloads systemd, enables the service on boot, and starts it immediately.
 
 ---
@@ -120,36 +122,27 @@ Run these commands directly on the Raspberry Pi:
 | Action | Command |
 | :--- | :--- |
 | **Check Status** | `make service-status` |
-| **View Live Logs** | `make service-logs` *(or `tail -f /etc/cloudflarelocaldns/cloudflareUpdateLog.txt`)* |
+| **View Live Logs** | `make service-logs` *(or `tail -f cloudflareUpdateLog.txt`)* |
 | **Restart Service** | `make service-restart` |
 | **Stop Service** | `make service-stop` |
 | **Start Service** | `make service-start` |
-| **Uninstall Service** | `sudo make uninstall-service` *(preserves `/etc/cloudflarelocaldns` config)* |
+| **Uninstall Service** | `sudo make uninstall-service` |
 
 ---
 
 ## Modifying Configuration After Installation
 
-When installed as a service, the active configuration resides at:
-```bash
-/etc/cloudflarelocaldns/.env
-```
+When installed as a service, the service directly references the `.env` in your project directory.
 
 To update settings:
-1. Edit the file:
+1. Edit your `.env` file in the project directory:
    ```bash
-   sudo nano /etc/cloudflarelocaldns/.env
+   nano .env
    ```
-2. Restart the service:
+2. Restart the service (which reloads systemd units and applies the new config):
    ```bash
    make service-restart
    ```
-
-Alternatively, if you edit `.env` in the project folder, copy it over and restart:
-```bash
-sudo cp .env /etc/cloudflarelocaldns/.env
-make service-restart
-```
 
 ---
 

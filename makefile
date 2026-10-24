@@ -3,7 +3,8 @@
 SERVICE_NAME := cloudflarelocaldns
 SERVICE_FILE := /etc/systemd/system/$(SERVICE_NAME).service
 BIN_PATH := /usr/local/bin/$(SERVICE_NAME)
-CONF_DIR := /etc/$(SERVICE_NAME)
+PROJECT_DIR := $(CURDIR)
+ENV_PATH := $(PROJECT_DIR)/.env
 
 .PHONY: help build build-mac build-linux-arm build-linux-arm64 build-all run clean \
         install-service service-start service-stop service-restart service-status \
@@ -80,25 +81,17 @@ install-service:
 	fi
 	@chmod +x $(BIN_PATH)
 	@echo "Binary installed to $(BIN_PATH)"
-	@mkdir -p $(CONF_DIR)
-	@if [ ! -f "$(CONF_DIR)/.env" ]; then \
-		if [ -f ".env" ]; then \
-			cp .env $(CONF_DIR)/.env; \
-			chmod 600 $(CONF_DIR)/.env; \
-			echo "Copied .env to $(CONF_DIR)/.env with secure permissions (0600)"; \
-		else \
-			echo "Warning: No .env found in current folder. Please create $(CONF_DIR)/.env with AUTH_KEY and DOMAIN."; \
-		fi; \
-	else \
-		echo "Existing config found at $(CONF_DIR)/.env (preserved)"; \
+	@if [ ! -f "$(ENV_PATH)" ]; then \
+		echo "Warning: No .env file found at $(ENV_PATH). Please create it with AUTH_KEY and DOMAIN."; \
 	fi
 	@echo "Creating systemd unit file at $(SERVICE_FILE)..."
-	@printf "[Unit]\nDescription=Cloudflare Local DNS Updater\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=root\nWorkingDirectory=$(CONF_DIR)\nExecStart=$(BIN_PATH)\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n" > $(SERVICE_FILE)
+	@printf "[Unit]\nDescription=Cloudflare Local DNS Updater\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=root\nWorkingDirectory=$(PROJECT_DIR)\nEnvironmentFile=$(ENV_PATH)\nEnvironment=ENV_FILE=$(ENV_PATH)\nExecStart=$(BIN_PATH)\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n" > $(SERVICE_FILE)
 	@systemctl daemon-reload
 	@systemctl enable $(SERVICE_NAME)
 	@systemctl start $(SERVICE_NAME)
 	@echo "--------------------------------------------------------"
 	@echo "Service '$(SERVICE_NAME)' successfully installed & started!"
+	@echo "Config: $(ENV_PATH)"
 	@echo "Status: make service-status"
 	@echo "Logs:   make service-logs"
 	@echo "--------------------------------------------------------"
@@ -179,4 +172,3 @@ uninstall-service:
 	@rm -f $(BIN_PATH)
 	@systemctl daemon-reload
 	@echo "Service '$(SERVICE_NAME)' has been removed."
-	@echo "Note: Configuration directory $(CONF_DIR) was preserved."

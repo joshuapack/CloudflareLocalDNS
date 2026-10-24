@@ -129,8 +129,13 @@ type IPInfoResponse struct {
 
 // loadConfig reads .env if present and environment variables
 func loadConfig() (*Config, error) {
-	// Attempt to load .env; ignore error if not found since env vars may be set externally
-	_ = godotenv.Load()
+	// Attempt to load .env; if ENV_FILE is set, load that file, otherwise default to .env
+	envPath := os.Getenv("ENV_FILE")
+	if envPath != "" {
+		_ = godotenv.Overload(envPath)
+	} else {
+		_ = godotenv.Overload()
+	}
 
 	authKey := strings.TrimSpace(os.Getenv("AUTH_KEY"))
 	if authKey == "" {
