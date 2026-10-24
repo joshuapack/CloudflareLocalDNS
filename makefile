@@ -2,8 +2,8 @@
 
 SERVICE_NAME := cloudflarelocaldns
 SERVICE_FILE := /etc/systemd/system/$(SERVICE_NAME).service
-BIN_PATH := /usr/local/bin/$(SERVICE_NAME)
 PROJECT_DIR := $(CURDIR)
+BIN_PATH := $(PROJECT_DIR)/$(SERVICE_NAME)
 ENV_PATH := $(PROJECT_DIR)/.env
 
 .PHONY: help build build-mac build-linux-arm build-linux-arm64 build-all run clean \
@@ -64,13 +64,12 @@ install-service:
 		echo "Use 'make service-restart' to apply changes, or 'sudo make uninstall-service' before reinstalling."; \
 		exit 1; \
 	fi
-	@echo "Locating binary for installation..."
-	@if [ -f "cloudflarelocaldns-linux-arm" ]; then \
-		echo "Using prebuilt cloudflarelocaldns-linux-arm..."; \
-		cp cloudflarelocaldns-linux-arm $(BIN_PATH); \
-	elif [ -f "cloudflarelocaldns" ]; then \
-		echo "Using local cloudflarelocaldns binary..."; \
-		cp cloudflarelocaldns $(BIN_PATH); \
+	@echo "Locating binary for service..."
+	@if [ -f "$(PROJECT_DIR)/cloudflarelocaldns" ]; then \
+		echo "Found $(BIN_PATH)..."; \
+	elif [ -f "$(PROJECT_DIR)/cloudflarelocaldns-linux-arm" ]; then \
+		echo "Found cloudflarelocaldns-linux-arm, setting up $(BIN_PATH)..."; \
+		cp $(PROJECT_DIR)/cloudflarelocaldns-linux-arm $(BIN_PATH); \
 	elif command -v go >/dev/null 2>&1; then \
 		echo "Building binary with local Go..."; \
 		go build -o $(BIN_PATH) main.go; \
@@ -80,7 +79,7 @@ install-service:
 		exit 1; \
 	fi
 	@chmod +x $(BIN_PATH)
-	@echo "Binary installed to $(BIN_PATH)"
+	@echo "Service configured to run: $(BIN_PATH)"
 	@if [ ! -f "$(ENV_PATH)" ]; then \
 		echo "Warning: No .env file found at $(ENV_PATH). Please create it with AUTH_KEY and DOMAIN."; \
 	fi
@@ -169,6 +168,5 @@ uninstall-service:
 	@systemctl stop $(SERVICE_NAME) 2>/dev/null || true
 	@systemctl disable $(SERVICE_NAME) 2>/dev/null || true
 	@rm -f $(SERVICE_FILE)
-	@rm -f $(BIN_PATH)
 	@systemctl daemon-reload
 	@echo "Service '$(SERVICE_NAME)' has been removed."

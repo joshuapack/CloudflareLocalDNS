@@ -28,7 +28,7 @@ Create a `.env` file in the project root (see `.env.example`):
 AUTH_KEY='your-cloudflare-api-token'
 DOMAIN='home.example.com'
 LOG='cloudflareUpdateLog.txt'
-UPDATE_TIME=1200
+UPDATE_TIME=3600
 ```
 
 ### Configuration Options
@@ -38,7 +38,7 @@ UPDATE_TIME=1200
 | `AUTH_KEY` | **Yes** | — | Cloudflare API Token with `Zone:Read` and `DNS:Edit` permissions |
 | `DOMAIN` | **Yes** | — | Target domain or subdomain to update (e.g., `home.example.com`) |
 | `LOG` | No | `cloudflareUpdateLog.txt` | File path to append timestamped logs |
-| `UPDATE_TIME` | No | `1200` | IP verification interval in seconds (e.g., `1200` = 20 minutes) |
+| `UPDATE_TIME` | No | `3600` | IP verification interval in seconds (e.g., `3600` = 1 hour) |
 
 > **Note on updating `.env`:** Configuration is loaded once on application startup. If you change `.env`, restart the process or service for changes to take effect.
 
@@ -47,6 +47,7 @@ UPDATE_TIME=1200
 ## Quick Start (Local Run)
 
 ### 1. View Help
+
 ```bash
 make
 # or
@@ -54,6 +55,7 @@ make help
 ```
 
 ### 2. Run Directly
+
 ```bash
 make run
 # or
@@ -61,6 +63,7 @@ go run main.go
 ```
 
 ### 3. Build Local Binary
+
 ```bash
 make build
 ./cloudflarelocaldns
@@ -88,16 +91,19 @@ The repository includes complete systemd service integration.
 ### Installation Steps
 
 1. **Build the Linux binary** (from your Mac or build machine):
+
    ```bash
    make build-linux-arm
    ```
 
 2. **Copy the repository to your Raspberry Pi**:
+
    ```bash
    rsync -avz --exclude='.git' ./ pi@raspberrypi:~/cloudflarelocaldns/
    ```
 
 3. **Install as a systemd service** (on the Raspberry Pi):
+
    ```bash
    cd ~/cloudflarelocaldns
    sudo make install-service
@@ -106,7 +112,7 @@ The repository includes complete systemd service integration.
    **What `make install-service` does automatically:**
    - Verifies systemd compatibility.
    - Checks if the service is already installed to prevent accidental overwrites.
-   - Installs the binary to `/usr/local/bin/cloudflarelocaldns`.
+   - Configures the service to run the binary directly from your project directory.
    - Generates `/etc/systemd/system/cloudflarelocaldns.service` with:
      - `WorkingDirectory` set to the project repository directory.
      - `EnvironmentFile` directly pointing to the project's `.env` file.
@@ -130,16 +136,37 @@ Run these commands directly on the Raspberry Pi:
 
 ---
 
+## Updating the Daemon
+
+Because the service runs directly from your working directory, updating is straightforward:
+
+```bash
+# 1. Pull latest code
+git pull
+
+# 2. Rebuild binary in the directory
+make build
+
+# 3. Restart the service
+make service-restart
+```
+
+---
+
 ## Modifying Configuration After Installation
 
 When installed as a service, the service directly references the `.env` in your project directory.
 
 To update settings:
+
 1. Edit your `.env` file in the project directory:
+
    ```bash
    nano .env
    ```
+
 2. Restart the service (which reloads systemd units and applies the new config):
+
    ```bash
    make service-restart
    ```
