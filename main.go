@@ -413,6 +413,7 @@ func main() {
 		// Only run an update to Cloudflare if any changes to the IP address
 		if publicIP == currentIP {
 			// IP unchanged; do not log success to keep logs clean
+			logger.LogInfo(fmt.Sprintf("IP unchanged: current IP=%s", currentIP))
 			return
 		}
 

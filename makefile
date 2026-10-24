@@ -1,11 +1,18 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help build build-mac build-linux-arm build-linux-arm64 build-all run clean
+SERVICE_NAME := cloudflarelocaldns
+SERVICE_FILE := /etc/systemd/system/$(SERVICE_NAME).service
+BIN_PATH := /usr/local/bin/$(SERVICE_NAME)
+CONF_DIR := /etc/$(SERVICE_NAME)
+
+.PHONY: help build build-mac build-linux-arm build-linux-arm64 build-all run clean \
+        install-service service-start service-stop service-restart service-status \
+        service-logs uninstall-service
 
 help:
 	@echo "Usage: make <target>"
 	@echo ""
-	@echo "Available targets:"
+	@echo "Build targets:"
 	@echo "  help               Show this help message"
 	@echo "  build              Build binary for current system (cloudflarelocaldns)"
 	@echo "  build-mac          Build binary for macOS arm64 (cloudflarelocaldns-mac)"
@@ -13,6 +20,15 @@ help:
 	@echo "  build-all          Build binaries for both Mac and Linux ARM64"
 	@echo "  run                Run directly with 'go run main.go'"
 	@echo "  clean              Remove all built binaries"
+	@echo ""
+	@echo "Service management (Debian / Raspberry Pi systemd):"
+	@echo "  install-service    Install, configure, enable, and start systemd service"
+	@echo "  service-start      Start the service"
+	@echo "  service-stop       Stop the service"
+	@echo "  service-restart    Restart the service"
+	@echo "  service-status     Check service status"
+	@echo "  service-logs       Follow live service logs via journalctl"
+	@echo "  uninstall-service  Stop, disable, and remove the systemd service"
 
 build:
 	go build -o cloudflarelocaldns main.go
@@ -32,3 +48,129 @@ run:
 
 clean:
 	rm -f cloudflarelocaldns cloudflarelocaldns-mac cloudflarelocaldns-linux-arm
+
+install-service:
+	@if ! command -v systemctl >/dev/null 2>&1; then \
+		echo "Error: systemctl not found. This installation requires a systemd-based system (e.g. Debian, Ubuntu, Raspberry Pi OS)."; \
+		exit 1; \
+	fi
+	@if [ "$$(id -u)" -ne 0 ]; then \
+		echo "Error: install-service requires root privileges. Please run: sudo make install-service"; \
+		exit 1; \
+	fi
+	@if [ -f "$(SERVICE_FILE)" ]; then \
+		echo "Error: Service is already installed at $(SERVICE_FILE)."; \
+		echo "Use 'make service-restart' to apply changes, or 'sudo make uninstall-service' before reinstalling."; \
+		exit 1; \
+	fi
+	@echo "Locating binary for installation..."
+	@if [ -f "cloudflarelocaldns-linux-arm" ]; then \
+		echo "Using prebuilt cloudflarelocaldns-linux-arm..."; \
+		cp cloudflarelocaldns-linux-arm $(BIN_PATH); \
+	elif [ -f "cloudflarelocaldns" ]; then \
+		echo "Using local cloudflarelocaldns binary..."; \
+		cp cloudflarelocaldns $(BIN_PATH); \
+	elif command -v go >/dev/null 2>&1; then \
+		echo "Building binary with local Go..."; \
+		go build -o $(BIN_PATH) main.go; \
+	else \
+		echo "Error: No compiled binary found and 'go' is not installed."; \
+		echo "Please run 'make build-linux-arm' or 'make build' first, or install Go."; \
+		exit 1; \
+	fi
+	@chmod +x $(BIN_PATH)
+	@echo "Binary installed to $(BIN_PATH)"
+	@mkdir -p $(CONF_DIR)
+	@if [ ! -f "$(CONF_DIR)/.env" ]; then \
+		if [ -f ".env" ]; then \
+			cp .env $(CONF_DIR)/.env; \
+			chmod 600 $(CONF_DIR)/.env; \
+			echo "Copied .env to $(CONF_DIR)/.env with secure permissions (0600)"; \
+		else \
+			echo "Warning: No .env found in current folder. Please create $(CONF_DIR)/.env with AUTH_KEY and DOMAIN."; \
+		fi; \
+	else \
+		echo "Existing config found at $(CONF_DIR)/.env (preserved)"; \
+	fi
+	@echo "Creating systemd unit file at $(SERVICE_FILE)..."
+	@printf "[Unit]\nDescription=Cloudflare Local DNS Updater\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=root\nWorkingDirectory=$(CONF_DIR)\nExecStart=$(BIN_PATH)\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n" > $(SERVICE_FILE)
+	@systemctl daemon-reload
+	@systemctl enable $(SERVICE_NAME)
+	@systemctl start $(SERVICE_NAME)
+	@echo "--------------------------------------------------------"
+	@echo "Service '$(SERVICE_NAME)' successfully installed & started!"
+	@echo "Status: make service-status"
+	@echo "Logs:   make service-logs"
+	@echo "--------------------------------------------------------"
+
+service-start:
+	@if ! command -v systemctl >/dev/null 2>&1; then \
+		echo "Error: systemctl not found. This target requires a systemd-based system."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(SERVICE_FILE)" ]; then \
+		echo "Error: Service is not installed. Run 'sudo make install-service' first."; \
+		exit 1; \
+	fi
+	@if [ "$$(id -u)" -ne 0 ]; then sudo systemctl start $(SERVICE_NAME); else systemctl start $(SERVICE_NAME); fi
+	@echo "Service '$(SERVICE_NAME)' started."
+
+service-stop:
+	@if ! command -v systemctl >/dev/null 2>&1; then \
+		echo "Error: systemctl not found. This target requires a systemd-based system."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(SERVICE_FILE)" ]; then \
+		echo "Error: Service is not installed."; \
+		exit 1; \
+	fi
+	@if [ "$$(id -u)" -ne 0 ]; then sudo systemctl stop $(SERVICE_NAME); else systemctl stop $(SERVICE_NAME); fi
+	@echo "Service '$(SERVICE_NAME)' stopped."
+
+service-restart:
+	@if ! command -v systemctl >/dev/null 2>&1; then \
+		echo "Error: systemctl not found. This target requires a systemd-based system."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(SERVICE_FILE)" ]; then \
+		echo "Error: Service is not installed. Run 'sudo make install-service' first."; \
+		exit 1; \
+	fi
+	@if [ "$$(id -u)" -ne 0 ]; then sudo systemctl restart $(SERVICE_NAME); else systemctl restart $(SERVICE_NAME); fi
+	@echo "Service '$(SERVICE_NAME)' restarted."
+
+service-status:
+	@if ! command -v systemctl >/dev/null 2>&1; then \
+		echo "Error: systemctl not found. This target requires a systemd-based system."; \
+		exit 1; \
+	fi
+	@systemctl status $(SERVICE_NAME)
+
+service-logs:
+	@if ! command -v journalctl >/dev/null 2>&1; then \
+		echo "Error: journalctl not found. This target requires a systemd-based system."; \
+		exit 1; \
+	fi
+	@journalctl -u $(SERVICE_NAME) -f
+
+uninstall-service:
+	@if ! command -v systemctl >/dev/null 2>&1; then \
+		echo "Error: systemctl not found. This target requires a systemd-based system."; \
+		exit 1; \
+	fi
+	@if [ "$$(id -u)" -ne 0 ]; then \
+		echo "Error: uninstall-service requires root privileges. Please run: sudo make uninstall-service"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(SERVICE_FILE)" ]; then \
+		echo "Service '$(SERVICE_NAME)' is not installed."; \
+		exit 0; \
+	fi
+	@echo "Stopping and disabling service..."
+	@systemctl stop $(SERVICE_NAME) 2>/dev/null || true
+	@systemctl disable $(SERVICE_NAME) 2>/dev/null || true
+	@rm -f $(SERVICE_FILE)
+	@rm -f $(BIN_PATH)
+	@systemctl daemon-reload
+	@echo "Service '$(SERVICE_NAME)' has been removed."
+	@echo "Note: Configuration directory $(CONF_DIR) was preserved."
