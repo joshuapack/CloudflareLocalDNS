@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Build All Platforms
+        run: |
+          mkdir -p dist
+
+          targets=(
+            "linux/amd64"
+            "linux/arm64"
+            "linux/arm/7"
+            "darwin/amd64"
+            "darwin/arm64"
+            "windows/amd64"
+            "windows/arm64"
+            "freebsd/amd64"
+          )
+
+          for target in "${targets[@]}"; do
+            IFS="/" read -r os arch extra <<< "$target"
+            output_name="cloudflarelocaldns-${os}-${arch}"
+            
+            if [ -n "$extra" ]; then
+              output_name="cloudflarelocaldns-${os}-${arch}v${extra}"
+            fi
+
+            if [ "$os" = "windows" ]; then
+              output_name="${output_name}.exe"
+            fi
+
+            echo "Compiling for ${os}/${arch}..."
+            if [ -n "$extra" ]; then
+              CGO_ENABLED=0 GOOS=$os GOARCH=$arch GOARM=$extra go build -ldflags="-s -w" -o "dist/${output_name}" main.go
+            else
+              CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -ldflags="-s -w" -o "dist/${output_name}" main.go
+            fi
+          done
+
+          cd dist
+          sha256sum * > checksums.txt
+          ls -lh
+
+      - name: Publish Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

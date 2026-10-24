@@ -4,3 +4,4 @@
 /cloudflarelocaldns-linux-arm
 *.log
 cloudflareUpdateLog.txt
+/dist
