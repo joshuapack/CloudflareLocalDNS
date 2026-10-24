@@ -136,7 +136,13 @@ service-restart:
 		echo "Error: Service is not installed. Run 'sudo make install-service' first."; \
 		exit 1; \
 	fi
-	@if [ "$$(id -u)" -ne 0 ]; then sudo systemctl restart $(SERVICE_NAME); else systemctl restart $(SERVICE_NAME); fi
+	@if [ "$$(id -u)" -ne 0 ]; then \
+		sudo systemctl daemon-reload; \
+		sudo systemctl restart $(SERVICE_NAME); \
+	else \
+		systemctl daemon-reload; \
+		systemctl restart $(SERVICE_NAME); \
+	fi
 	@echo "Service '$(SERVICE_NAME)' restarted."
 
 service-status:
