@@ -1,0 +1,6 @@
+.env
+/cloudflarelocaldns
+/cloudflarelocaldns-mac
+/cloudflarelocaldns-linux-arm
+*.log
+cloudflareUpdateLog.txt
