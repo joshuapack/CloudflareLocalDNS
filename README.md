@@ -131,12 +131,13 @@ The repository includes complete systemd service integration.
    - Checks if the service is already installed to prevent accidental overwrites.
    - Configures the service to run under your selected user (`current user`, `root`, or custom).
    - Validates that the specified user exists on the system.
-   - Automatically sets proper ownership and permissions on `.env` (chmod 600) and `cloudflareUpdateLog.txt`.
-   - Configures the service to run the binary directly from your project directory.
+   - Automatically detects the existing binary (`cloudflarelocaldns` or `cloudflarelocaldns-linux-arm`) and configures `ExecStart` directly without copying files as root.
+   - Ensures proper ownership for the target user on the binary, `.env` (chmod 600), and `cloudflareUpdateLog.txt`.
    - Generates `/etc/systemd/system/cloudflarelocaldns.service` with:
      - `User` set to the selected user.
      - `WorkingDirectory` set to the project repository directory.
      - `EnvironmentFile` directly pointing to the project's `.env` file.
+     - `ExecStart` pointing directly to the detected binary.
      - Automatic crash recovery (`Restart=always`).
    - Reloads systemd, enables the service on boot, and starts it immediately.
 

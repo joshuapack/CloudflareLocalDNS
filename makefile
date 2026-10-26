@@ -111,21 +111,31 @@ install-service:
 	fi; \
 	echo "Configured service user: $$TARGET_USER"; \
 	echo "Locating binary for service..."; \
+	TARGET_BIN=""; \
 	if [ -f "$(PROJECT_DIR)/cloudflarelocaldns" ]; then \
-		echo "Found $(BIN_PATH)..."; \
+		TARGET_BIN="$(PROJECT_DIR)/cloudflarelocaldns"; \
+		echo "Found binary: $$TARGET_BIN"; \
 	elif [ -f "$(PROJECT_DIR)/cloudflarelocaldns-linux-arm" ]; then \
-		echo "Found cloudflarelocaldns-linux-arm, setting up $(BIN_PATH)..."; \
-		cp $(PROJECT_DIR)/cloudflarelocaldns-linux-arm $(BIN_PATH); \
+		TARGET_BIN="$(PROJECT_DIR)/cloudflarelocaldns-linux-arm"; \
+		echo "Found binary: $$TARGET_BIN"; \
 	elif command -v go >/dev/null 2>&1; then \
 		echo "Building binary with local Go..."; \
-		go build -o $(BIN_PATH) main.go; \
+		TARGET_BIN="$(PROJECT_DIR)/cloudflarelocaldns"; \
+		if [ "$$TARGET_USER" != "root" ]; then \
+			su -s /bin/sh "$$TARGET_USER" -c "go build -o '$$TARGET_BIN' main.go" || go build -o "$$TARGET_BIN" main.go; \
+		else \
+			go build -o "$$TARGET_BIN" main.go; \
+		fi; \
 	else \
 		echo "Error: No compiled binary found and 'go' is not installed."; \
 		echo "Please run 'make build-linux-arm' or 'make build' first, or install Go."; \
 		exit 1; \
 	fi; \
-	chmod +x $(BIN_PATH); \
-	echo "Service configured to run: $(BIN_PATH)"; \
+	chmod +x "$$TARGET_BIN"; \
+	if [ "$$TARGET_USER" != "root" ]; then \
+		chown "$$TARGET_USER" "$$TARGET_BIN" 2>/dev/null || true; \
+	fi; \
+	echo "Service configured to run: $$TARGET_BIN"; \
 	if [ ! -f "$(ENV_PATH)" ]; then \
 		echo "Warning: No .env file found at $(ENV_PATH). Please create it with AUTH_KEY and DOMAIN."; \
 	fi; \
@@ -141,13 +151,14 @@ install-service:
 	fi; \
 	echo "Creating systemd unit file at $(SERVICE_FILE)..."; \
 	printf "[Unit]\nDescription=Cloudflare Local DNS Updater\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=%s\nWorkingDirectory=%s\nEnvironmentFile=%s\nEnvironment=ENV_FILE=%s\nExecStart=%s\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n" \
-		"$$TARGET_USER" "$(PROJECT_DIR)" "$(ENV_PATH)" "$(ENV_PATH)" "$(BIN_PATH)" > $(SERVICE_FILE); \
+		"$$TARGET_USER" "$(PROJECT_DIR)" "$(ENV_PATH)" "$(ENV_PATH)" "$$TARGET_BIN" > $(SERVICE_FILE); \
 	systemctl daemon-reload; \
 	systemctl enable $(SERVICE_NAME); \
 	systemctl start $(SERVICE_NAME); \
 	echo "--------------------------------------------------------"; \
 	echo "Service '$(SERVICE_NAME)' successfully installed & started!"; \
 	echo "Run As: $$TARGET_USER"; \
+	echo "Binary: $$TARGET_BIN"; \
 	echo "Config: $(ENV_PATH)"; \
 	echo "Status: make service-status"; \
 	echo "Logs:   make service-logs"; \
