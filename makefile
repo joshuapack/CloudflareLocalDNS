@@ -6,24 +6,29 @@ PROJECT_DIR := $(CURDIR)
 BIN_PATH := $(PROJECT_DIR)/$(SERVICE_NAME)
 ENV_PATH := $(PROJECT_DIR)/.env
 
+SERVICE_USER ?=
+
 .PHONY: help build build-mac build-linux-arm build-linux-arm64 build-all run clean \
         install-service service-start service-stop service-restart service-status \
         service-logs uninstall-service
 
 help:
-	@echo "Usage: make <target>"
+	@echo "Usage: make <target> [SERVICE_USER=<username>]"
 	@echo ""
 	@echo "Build targets:"
 	@echo "  help               Show this help message"
 	@echo "  build              Build binary for current system (cloudflarelocaldns)"
 	@echo "  build-mac          Build binary for macOS arm64 (cloudflarelocaldns-mac)"
 	@echo "  build-linux-arm    Build binary for Linux arm64 (cloudflarelocaldns-linux-arm)"
+	@echo "  build-linux-arm64  Build binary for Linux arm64 (alias)"
 	@echo "  build-all          Build binaries for both Mac and Linux ARM64"
 	@echo "  run                Run directly with 'go run main.go'"
 	@echo "  clean              Remove all built binaries"
 	@echo ""
 	@echo "Service management (Debian / Raspberry Pi systemd):"
 	@echo "  install-service    Install, configure, enable, and start systemd service"
+	@echo "                     (Prompts for user: current user, root, or custom user;"
+	@echo "                      or pass SERVICE_USER=current|root|<username>)"
 	@echo "  service-start      Start the service"
 	@echo "  service-stop       Stop the service"
 	@echo "  service-restart    Restart the service"
@@ -64,8 +69,49 @@ install-service:
 		echo "Use 'make service-restart' to apply changes, or 'sudo make uninstall-service' before reinstalling."; \
 		exit 1; \
 	fi
-	@echo "Locating binary for service..."
-	@if [ -f "$(PROJECT_DIR)/cloudflarelocaldns" ]; then \
+	@CURRENT_USER="$${SUDO_USER:-$$(id -un)}"; \
+	TARGET_USER="$(SERVICE_USER)"; \
+	if [ -n "$$TARGET_USER" ]; then \
+		case "$$TARGET_USER" in \
+			current|[cC][uU][rR][rR][eE][nN][tT]) TARGET_USER="$$CURRENT_USER" ;; \
+		esac; \
+	else \
+		if [ -t 0 ] && [ -r /dev/tty ]; then \
+			echo ""; \
+			echo "Choose which user the service should run as:"; \
+			echo "  1) Current user ($$CURRENT_USER) [default]"; \
+			echo "  2) root"; \
+			echo "  3) Custom user"; \
+			printf "Enter choice [1-3] (default 1): "; \
+			read -r user_choice < /dev/tty || user_choice="1"; \
+			case "$$user_choice" in \
+				1|""|[cC][uU][rR][rR][eE][nN][tT]) TARGET_USER="$$CURRENT_USER" ;; \
+				2|[rR][oO][oO][tT]) TARGET_USER="root" ;; \
+				3) \
+					printf "Enter username: "; \
+					read -r custom_user < /dev/tty || custom_user=""; \
+					TARGET_USER="$$custom_user"; \
+					;; \
+				*) \
+					TARGET_USER="$$user_choice"; \
+					;; \
+			esac; \
+		else \
+			echo "Non-interactive session detected; defaulting service user to '$$CURRENT_USER'."; \
+			TARGET_USER="$$CURRENT_USER"; \
+		fi; \
+	fi; \
+	if [ -z "$$TARGET_USER" ]; then \
+		echo "Error: No user specified."; \
+		exit 1; \
+	fi; \
+	if ! id -u "$$TARGET_USER" >/dev/null 2>&1; then \
+		echo "Error: User '$$TARGET_USER' does not exist on this system."; \
+		exit 1; \
+	fi; \
+	echo "Configured service user: $$TARGET_USER"; \
+	echo "Locating binary for service..."; \
+	if [ -f "$(PROJECT_DIR)/cloudflarelocaldns" ]; then \
 		echo "Found $(BIN_PATH)..."; \
 	elif [ -f "$(PROJECT_DIR)/cloudflarelocaldns-linux-arm" ]; then \
 		echo "Found cloudflarelocaldns-linux-arm, setting up $(BIN_PATH)..."; \
@@ -77,23 +123,35 @@ install-service:
 		echo "Error: No compiled binary found and 'go' is not installed."; \
 		echo "Please run 'make build-linux-arm' or 'make build' first, or install Go."; \
 		exit 1; \
-	fi
-	@chmod +x $(BIN_PATH)
-	@echo "Service configured to run: $(BIN_PATH)"
-	@if [ ! -f "$(ENV_PATH)" ]; then \
+	fi; \
+	chmod +x $(BIN_PATH); \
+	echo "Service configured to run: $(BIN_PATH)"; \
+	if [ ! -f "$(ENV_PATH)" ]; then \
 		echo "Warning: No .env file found at $(ENV_PATH). Please create it with AUTH_KEY and DOMAIN."; \
-	fi
-	@echo "Creating systemd unit file at $(SERVICE_FILE)..."
-	@printf "[Unit]\nDescription=Cloudflare Local DNS Updater\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=root\nWorkingDirectory=$(PROJECT_DIR)\nEnvironmentFile=$(ENV_PATH)\nEnvironment=ENV_FILE=$(ENV_PATH)\nExecStart=$(BIN_PATH)\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n" > $(SERVICE_FILE)
-	@systemctl daemon-reload
-	@systemctl enable $(SERVICE_NAME)
-	@systemctl start $(SERVICE_NAME)
-	@echo "--------------------------------------------------------"
-	@echo "Service '$(SERVICE_NAME)' successfully installed & started!"
-	@echo "Config: $(ENV_PATH)"
-	@echo "Status: make service-status"
-	@echo "Logs:   make service-logs"
-	@echo "--------------------------------------------------------"
+	fi; \
+	if [ "$$TARGET_USER" != "root" ]; then \
+		if [ -f "$(PROJECT_DIR)/cloudflareUpdateLog.txt" ]; then \
+			echo "Setting ownership of existing log file to '$$TARGET_USER'..."; \
+			chown "$$TARGET_USER" "$(PROJECT_DIR)/cloudflareUpdateLog.txt" 2>/dev/null || true; \
+		fi; \
+		if [ -f "$(ENV_PATH)" ]; then \
+			chown "$$TARGET_USER" "$(ENV_PATH)" 2>/dev/null || true; \
+			chmod 600 "$(ENV_PATH)" 2>/dev/null || true; \
+		fi; \
+	fi; \
+	echo "Creating systemd unit file at $(SERVICE_FILE)..."; \
+	printf "[Unit]\nDescription=Cloudflare Local DNS Updater\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=%s\nWorkingDirectory=%s\nEnvironmentFile=%s\nEnvironment=ENV_FILE=%s\nExecStart=%s\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n" \
+		"$$TARGET_USER" "$(PROJECT_DIR)" "$(ENV_PATH)" "$(ENV_PATH)" "$(BIN_PATH)" > $(SERVICE_FILE); \
+	systemctl daemon-reload; \
+	systemctl enable $(SERVICE_NAME); \
+	systemctl start $(SERVICE_NAME); \
+	echo "--------------------------------------------------------"; \
+	echo "Service '$(SERVICE_NAME)' successfully installed & started!"; \
+	echo "Run As: $$TARGET_USER"; \
+	echo "Config: $(ENV_PATH)"; \
+	echo "Status: make service-status"; \
+	echo "Logs:   make service-logs"; \
+	echo "--------------------------------------------------------"
 
 service-start:
 	@if ! command -v systemctl >/dev/null 2>&1; then \

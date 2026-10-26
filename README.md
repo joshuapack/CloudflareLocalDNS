@@ -109,11 +109,32 @@ The repository includes complete systemd service integration.
    sudo make install-service
    ```
 
+   When prompted, choose the user to run the service under:
+   - **`1) Current user`** *(Default)*: Runs as the non-root user who invoked `sudo` (e.g. `pi`), ensuring proper ownership of logs and preventing root file creation in your project.
+   - **`2) root`**: Runs the service as `root`.
+   - **`3) Custom user`**: Prompts you to enter any existing system username.
+
+   > **Tip — Non-interactive / scripted install:** You can skip the interactive prompt by passing `SERVICE_USER`:
+   > ```bash
+   > # Run as invoking user:
+   > sudo make install-service SERVICE_USER=current
+   >
+   > # Run as specific user:
+   > sudo make install-service SERVICE_USER=pi
+   >
+   > # Run as root:
+   > sudo make install-service SERVICE_USER=root
+   > ```
+
    **What `make install-service` does automatically:**
    - Verifies systemd compatibility.
    - Checks if the service is already installed to prevent accidental overwrites.
+   - Configures the service to run under your selected user (`current user`, `root`, or custom).
+   - Validates that the specified user exists on the system.
+   - Automatically sets proper ownership and permissions on `.env` (chmod 600) and `cloudflareUpdateLog.txt`.
    - Configures the service to run the binary directly from your project directory.
    - Generates `/etc/systemd/system/cloudflarelocaldns.service` with:
+     - `User` set to the selected user.
      - `WorkingDirectory` set to the project repository directory.
      - `EnvironmentFile` directly pointing to the project's `.env` file.
      - Automatic crash recovery (`Restart=always`).
