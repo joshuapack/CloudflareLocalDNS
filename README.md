@@ -40,6 +40,23 @@ UPDATE_TIME=3600
 | `LOG` | No | `cloudflareUpdateLog.txt` | File path to append timestamped logs |
 | `UPDATE_TIME` | No | `3600` | IP verification interval in seconds (e.g., `3600` = 1 hour) |
 
+### How to Get Your Cloudflare API Token (`AUTH_KEY`)
+
+1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/).
+2. In the top-right corner, click on your profile icon and select **My Profile** > **API Tokens** (or navigate directly to [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)).
+3. Click **Create Token**.
+4. You can use the built-in **Edit zone DNS** template (click **Use template**), or create a custom token with the following settings:
+   - **Permissions:**
+     - `Zone` → `DNS` → `Edit`
+     - `Zone` → `Zone` → `Read`
+   - **Zone Resources:**
+     - `Include` → `All zones` (or `Include` → `Specific zone` → select your target domain)
+5. Click **Continue to summary**, then click **Create Token**.
+6. Copy your generated token and paste it into your `.env` file as `AUTH_KEY`.
+
+> [!NOTE]
+> Make sure to use a scoped **API Token** (used as a Bearer token), **not** the legacy Global API Key.
+
 > **Note on updating `.env`:** Configuration is loaded once on application startup. If you change `.env`, restart the process or service for changes to take effect.
 
 ---
